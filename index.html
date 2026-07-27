@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Batari POS - Kasir Offline Android Tablet</title>
+
+    <!-- Meta Tags for Android Tablet PWA -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0026e6">
+    <meta name="application-name" content="Batari POS">
+
+    <!-- CDN Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        batari: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#1a3bf0',
+                            600: '#0026e6',
+                            700: '#001ec4',
+                            800: '#00179f',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Thermal Printer Receipt Styles Optimized for VSC / 58mm Paper Width */
+        @media print {
+            html, body {
+                width: 58mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+            }
+            body * {
+                visibility: hidden !important;
+            }
+            #printable-receipt, #printable-receipt * {
+                visibility: visible !important;
+            }
+            #printable-receipt {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 48mm !important; /* Standard printable area for 58mm thermal paper */
+                max-width: 48mm !important;
+                padding: 0mm 1mm !important;
+                font-family: 'Courier New', Courier, monospace !important;
+                font-size: 9.5px !important;
+                line-height: 1.2 !important;
+                color: #000 !important;
+                background: #fff !important;
+                margin: 0 !important;
+                box-sizing: border-box !important;
+                word-break: break-all !important;
+            }
+            @page {
+                size: 58mm auto;
+                margin: 0mm !important;
+            }
+        }
+
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 antialiased select-none h-screen flex flex-col overflow-hidden" x-data="batariApp()">
+
+    <header class="bg-batari-600 text-white shadow-md flex-none z-20">
+        <div class="px-4 py-2.5 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <!-- SVG Vector Batari Logo -->
+                <div class="w-10 h-10 bg-white rounded-full p-0.5 shadow-md flex items-center justify-center flex-none">
+                    <svg viewBox="0 0 200 200" class="w-full h-full">
+                        <circle cx="100" cy="100" r="96" fill="#0026e6" />
+                        <circle cx="100" cy="100" r="88" fill="none" stroke="#ffffff" stroke-width="6" />
+                        <path d="M 70 50 C 110 40, 145 70, 115 76 C 85 82, 70 50, 70 50 Z" fill="#ffffff" />
+                        <path d="M 60 36 H 120 C 150 36, 150 78, 122 80 C 155 82, 155 138, 118 138 H 60 Z M 80 54 V 120 H 115 C 130 120, 130 96, 115 96 C 95 96, 80 120, 80 120 M 80 54 H 115 C 128 54, 128 78, 115 78 C 95 78, 80 54, 80 54" fill="#ffffff" />
+                        <path d="M 60 122 C 90 90, 130 95, 125 110 C 120 125, 90 138, 60 122 Z" fill="#ffffff" />
+                        <text x="100" y="162" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-weight="900" font-size="28" letter-spacing="1">Batari</text>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg leading-none tracking-wide">Batari Coffee & Space</h1>
+                    <div class="flex items-center space-x-2 mt-0.5">
+                        <span class="text-[10px] bg-batari-800 text-blue-200 px-2 py-0.5 rounded-full inline-block font-medium">Mode Offline POS</span>
+                        <span class="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full inline-block font-semibold" x-text="'Kasir: ' + cashierName"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation Bar Buttons -->
+            <div class="flex items-center space-x-1 sm:space-x-2">
+                <button @click="toggleFullscreen()" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-batari-700 text-white hover:bg-batari-800 transition flex items-center space-x-1" title="Layar Penuh">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    <span class="hidden md:inline">Full</span>
+                </button>
+
+                <button x-show="canInstall" @click="installPwa()" class="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-amber-400 text-slate-900 hover:bg-amber-300 transition flex items-center space-x-1 shadow animate-pulse">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span>Install PWA</span>
+                </button>
+
+                <button @click="switchTab('pos')" :class="activeTab === 'pos' ? 'bg-white text-batari-700 shadow' : 'text-white hover:bg-batari-500'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"></path></svg>
+                    <span class="hidden sm:inline">Kasir</span>
+                </button>
+                <button @click="switchTab('history')" :class="activeTab === 'history' ? 'bg-white text-batari-700 shadow' : 'text-white hover:bg-batari-500'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                    <span class="hidden sm:inline">Riwayat</span>
+                    <span x-show="!isHistoryUnlocked" class="text-[10px] ml-0.5 bg-amber-400 text-slate-900 px-1 rounded-md font-black">🔒</span>
+                </button>
+                <button @click="switchTab('menu-manager')" :class="activeTab === 'menu-manager' ? 'bg-white text-batari-700 shadow' : 'text-white hover:bg-batari-500'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    <span class="hidden sm:inline">Kelola Menu</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-hidden relative">
+
+        <!-- TAB 1: KASIR / REGISTER -->
+        <div x-show="activeTab === 'pos'" class="h-full flex flex-col md:flex-row overflow-hidden">
+            
+            <!-- Left Side: Menu Grid & Search -->
+            <div class="flex-1 flex flex-col h-full overflow-hidden bg-slate-50 border-r border-slate-200">
+                
+                <!-- Category Filter & Search Bar -->
+                <div class="p-3 bg-white border-b border-slate-200 space-y-2 flex-none shadow-sm">
+                    <div class="relative">
+                        <input type="text" x-model="searchQuery" placeholder="Cari menu kopi, teh, cemilan..." class="w-full pl-9 pr-8 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-batari-500 text-slate-800">
+                        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                    </div>
+
+                    <!-- Category Pills -->
+                    <div class="flex space-x-1.5 overflow-x-auto hide-scrollbar pb-1 pt-1">
+                        <template x-for="cat in categories" :key="cat">
+                            <button @click="selectedCategory = cat" 
+                                    :class="selectedCategory === cat ? 'bg-batari-600 text-white font-semibold shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" 
+                                    class="px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition">
+                                <span x-text="cat"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 content-start">
+                    <template x-for="item in filteredMenuItems" :key="item.id">
+                        <div @click="addToCart(item)" class="bg-white rounded-xl p-3 border border-slate-200 shadow-sm hover:shadow-md hover:border-batari-500 transition cursor-pointer flex flex-col justify-between active:scale-95 transform duration-100 relative group">
+                            
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 truncate max-w-[90px]" x-text="item.category"></span>
+                                <span class="text-xs font-extrabold text-batari-600 bg-blue-50 px-2 py-0.5 rounded-md" x-text="formatRupiah(item.price)"></span>
+                            </div>
+
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm leading-tight group-hover:text-batari-600 transition" x-text="item.name"></h3>
+                            </div>
+
+                            <div class="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-batari-600 font-medium">
+                                <span>Tambah</span>
+                                <div class="w-6 h-6 rounded-full bg-batari-50 group-hover:bg-batari-600 group-hover:text-white flex items-center justify-center transition font-bold">
+                                    +
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div x-show="filteredMenuItems.length === 0" class="col-span-full py-12 text-center text-slate-400">
+                        <svg class="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 9.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <p class="text-sm font-medium">Menu tidak ditemukan</p>
+                    </div>
+                </div>
+
+                <!-- Floating Cart Bar for Mobile View -->
+                <div x-show="cart.length > 0" class="md:hidden bg-batari-700 text-white p-3 flex justify-between items-center shadow-lg border-t border-batari-800 flex-none">
+                    <div>
+                        <div class="text-xs text-blue-200" x-text="cartTotalCount() + ' Item Pesanan'"></div>
+                        <div class="text-base font-extrabold" x-text="formatRupiah(cartGrandTotal())"></div>
+                    </div>
+                    <button @click="showMobileCart = true" class="bg-white text-batari-700 px-4 py-2 rounded-xl text-xs font-extrabold shadow active:bg-blue-50">
+                        Lihat Keranjang →
+                    </button>
+                </div>
+            </div>
+
+            <div :class="showMobileCart ? 'fixed inset-0 z-50 flex flex-col bg-white md:relative md:z-0' : 'hidden md:flex md:w-80 lg:w-96 flex-col bg-white border-l border-slate-200 h-full'">
+                
+                <div class="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-none">
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-5 h-5 text-batari-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                        <h2 class="font-bold text-slate-800 text-base">Pesanan Aktif</h2>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button x-show="cart.length > 0" @click="confirmClearCart()" class="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50">Reset</button>
+                        <button @click="showMobileCart = false" class="md:hidden text-slate-400 hover:text-slate-600 p-1 font-bold">✕</button>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-white border-b border-slate-100 space-y-2 flex-none">
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Kasir</label>
+                            <select x-model="cashierName" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-batari-500 font-medium text-slate-700">
+                                <template x-for="c in cashiers" :key="c">
+                                    <option :value="c" x-text="c"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Pemesan</label>
+                            <input type="text" x-model="customerName" placeholder="Pelanggan" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-batari-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Tipe</label>
+                            <select x-model="orderType" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-batari-500 font-medium text-slate-700">
+                                <option value="Dine-In">Dine In</option>
+                                <option value="Takeaway">Takeaway</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                    <template x-for="(cartItem, index) in cart" :key="cartItem.id">
+                        <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col space-y-1.5">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h4 class="font-bold text-slate-800 text-xs" x-text="cartItem.name"></h4>
+                                    <span class="text-[11px] text-slate-500" x-text="formatRupiah(cartItem.price) + ' × ' + cartItem.qty"></span>
+                                </div>
+                                <span class="font-extrabold text-xs text-slate-800" x-text="formatRupiah(cartItem.price * cartItem.qty)"></span>
+                            </div>
+
+                            <div class="flex items-center justify-between pt-1">
+                                <input type="text" x-model="cartItem.note" placeholder="Catatan (opsional)..." class="text-[11px] px-2 py-0.5 border border-slate-200 bg-white rounded w-32 focus:outline-none focus:border-batari-500">
+                                
+                                <div class="flex items-center space-x-1.5 bg-white border border-slate-200 rounded-lg p-0.5">
+                                    <button @click="updateQty(index, -1)" class="w-5 h-5 rounded flex items-center justify-center bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 text-xs">-</button>
+                                    <span class="w-5 text-center font-bold text-xs" x-text="cartItem.qty"></span>
+                                    <button @click="updateQty(index, 1)" class="w-5 h-5 rounded flex items-center justify-center bg-batari-600 text-white font-bold hover:bg-batari-700 text-xs">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div x-show="cart.length === 0" class="h-48 flex flex-col items-center justify-center text-slate-400 space-y-2">
+                        <svg class="w-12 h-12 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+                        <p class="text-xs font-medium">Keranjang masih kosong</p>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-50 border-t border-slate-200 space-y-2 flex-none">
+                    <div class="space-y-1 text-xs text-slate-600">
+                        <div class="flex justify-between">
+                            <span>Subtotal</span>
+                            <span class="font-medium text-slate-800" x-text="formatRupiah(cartTotalPrice())"></span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span>Diskon (Rp)</span>
+                            <input type="number" x-model.number="discount" min="0" placeholder="0" class="w-24 px-2 py-0.5 border border-slate-200 rounded text-right text-xs focus:ring-1 focus:ring-batari-500">
+                        </div>
+                        <div class="flex justify-between font-extrabold text-sm text-slate-900 pt-1 border-t border-slate-200">
+                            <span>Total Pembayaran</span>
+                            <span class="text-batari-600" x-text="formatRupiah(cartGrandTotal())"></span>
+                        </div>
+                    </div>
+
+                    <button @click="openCheckoutModal()" :disabled="cart.length === 0" :class="cart.length === 0 ? 'bg-slate-300 cursor-not-allowed' : 'bg-batari-600 hover:bg-batari-700 shadow-md active:scale-98'" class="w-full py-2.5 rounded-xl text-white font-bold text-sm transition flex items-center justify-center space-x-2">
+                        <span>Bayar Sekarang</span>
+                        <span x-text="'(' + cartTotalCount() + ')'"></span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <div x-show="activeTab === 'history'" class="h-full overflow-y-auto p-4 bg-slate-50">
+            
+            <!-- Lock Screen Form (When History is Locked) -->
+            <div x-show="!isHistoryUnlocked" class="max-w-sm mx-auto my-12 bg-white rounded-2xl p-6 border border-slate-200 shadow-xl space-y-4">
+                <div class="text-center space-y-2">
+                    <div class="w-12 h-12 bg-batari-50 text-batari-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                    </div>
+                    <h3 class="text-base font-extrabold text-slate-800">Akses Riwayat Terkunci</h3>
+                    <p class="text-xs text-slate-500">Masukkan Username & Password untuk membuka halaman Riwayat Transaksi.</p>
+                </div>
+
+                <form @submit.prevent="unlockHistory()" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">Username</label>
+                        <div class="relative">
+                            <input :type="showUsernameText ? 'text' : 'password'" x-model="authUsername" placeholder="Masukkan username" class="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-batari-500 focus:outline-none font-medium">
+                            <button type="button" @click="showUsernameText = !showUsernameText" class="absolute right-3 top-2 text-slate-400 hover:text-slate-600 text-xs py-1">
+                                <span x-text="showUsernameText ? '🙈' : '👁️'"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">Password</label>
+                        <div class="relative">
+                            <input :type="showPasswordText ? 'text' : 'password'" x-model="authPassword" placeholder="Masukkan password" class="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-batari-500 focus:outline-none font-medium">
+                            <button type="button" @click="showPasswordText = !showPasswordText" class="absolute right-3 top-2 text-slate-400 hover:text-slate-600 text-xs py-1">
+                                <span x-text="showPasswordText ? '🙈' : '👁️'"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div x-show="authError" class="p-2 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-semibold text-center" x-text="authError"></div>
+
+                    <button type="submit" class="w-full py-2.5 bg-batari-600 hover:bg-batari-700 text-white font-extrabold rounded-xl text-xs transition shadow-md active:scale-98">
+                        Buka Riwayat
+                    </button>
+                </form>
+            </div>
+
+            <!-- Main History Content (When Unlocked) -->
+            <div x-show="isHistoryUnlocked" class="max-w-5xl mx-auto space-y-4">
+                
+                <!-- Daily Statistics Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Total Omset</span>
+                            <div class="text-lg font-black text-batari-600 mt-0.5" x-text="formatRupiah(calculateTotalRevenue())"></div>
+                        </div>
+                        <div class="w-9 h-9 bg-blue-50 text-batari-600 rounded-xl flex items-center justify-center font-bold">💰</div>
+                    </div>
+                    <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Total Transaksi</span>
+                            <div class="text-lg font-black text-slate-800 mt-0.5" x-text="transactions.length + ' Nota'"></div>
+                        </div>
+                        <div class="w-9 h-9 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-bold">📄</div>
+                    </div>
+                    <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Metode Tunai / Digital</span>
+                            <div class="text-xs font-extrabold text-slate-700 mt-0.5" x-text="'Tunai: ' + formatRupiah(calculatePaymentBreakdown().cash) + ' | QRIS/TF: ' + formatRupiah(calculatePaymentBreakdown().digital)"></div>
+                        </div>
+                        <div class="w-9 h-9 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center font-bold">💳</div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="text-lg font-bold text-slate-800">Riwayat Transaksi Penjualan</h2>
+                            <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Tersimpan Lokal</span>
+                        </div>
+                        <p class="text-xs text-slate-500">Semua transaksi tersimpan secara aman di memori perangkat ini.</p>
+                    </div>
+                    <div class="flex items-center space-x-2 flex-wrap gap-1">
+                        <button @click="lockHistory()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                            <span>Kunci Akses</span>
+                        </button>
+                        <button @click="exportToPDF()" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                            <span>Download PDF</span>
+                        </button>
+                        <button @click="exportToCSV()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <span>Export CSV</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- History List Table -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-600 text-[11px] uppercase tracking-wider font-bold border-b border-slate-200">
+                                    <th class="p-3">No. Nota</th>
+                                    <th class="p-3">Waktu</th>
+                                    <th class="p-3">Kasir</th>
+                                    <th class="p-3">Pelanggan</th>
+                                    <th class="p-3">Metode</th>
+                                    <th class="p-3 text-right">Total</th>
+                                    <th class="p-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-xs">
+                                <template x-for="trx in transactions" :key="trx.id">
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="p-3 font-mono font-semibold text-batari-600" x-text="trx.invoiceNo"></td>
+                                        <td class="p-3 text-slate-500" x-text="trx.dateTime"></td>
+                                        <td class="p-3 font-semibold text-slate-700" x-text="trx.cashierName || 'KEBOO'"></td>
+                                        <td class="p-3 font-medium text-slate-800" x-text="trx.customerName + ' (' + trx.orderType + ')'"></td>
+                                        <td class="p-3">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold" 
+                                                  :class="trx.paymentMethod === 'Cash' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'" 
+                                                  x-text="trx.paymentMethod"></span>
+                                        </td>
+                                        <td class="p-3 text-right font-extrabold text-slate-800" x-text="formatRupiah(trx.grandTotal)"></td>
+                                        <td class="p-3 text-center space-x-1">
+                                            <button @click="reprintReceipt(trx)" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[11px] font-medium text-slate-700">Struk</button>
+                                            <button @click="confirmDeleteTransaction(trx.id)" class="px-2 py-1 bg-red-50 hover:bg-red-100 rounded text-[11px] font-medium text-red-600">Hapus</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div x-show="transactions.length === 0" class="p-8 text-center text-slate-400">
+                        <p class="text-sm">Belum ada riwayat transaksi.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="activeTab === 'menu-manager'" class="h-full overflow-y-auto p-4 bg-slate-50">
+            <div class="max-w-4xl mx-auto space-y-4">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">Kelola Daftar Menu Batari</h2>
+                        <p class="text-xs text-slate-500">Tambah menu baru, ubah harga, atau reset ke menu bawaan</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button @click="confirmResetDefaultMenu()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition">
+                            Reset Menu Default
+                        </button>
+                        <button @click="openAddMenuModal()" class="px-3 py-1.5 bg-batari-600 hover:bg-batari-700 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1">
+                            <span>+ Tambah Menu</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Menu Table -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-600 text-[11px] uppercase tracking-wider font-bold border-b border-slate-200">
+                                    <th class="p-3">Nama Menu</th>
+                                    <th class="p-3">Kategori</th>
+                                    <th class="p-3">Harga</th>
+                                    <th class="p-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <template x-for="item in menuItems" :key="item.id">
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="p-3 font-bold text-slate-800" x-text="item.name"></td>
+                                        <td class="p-3 text-slate-500" x-text="item.category"></td>
+                                        <td class="p-3 font-semibold text-batari-600" x-text="formatRupiah(item.price)"></td>
+                                        <td class="p-3 text-center space-x-2">
+                                            <button @click="editMenuItem(item)" class="text-blue-600 hover:underline font-medium">Edit</button>
+                                            <button @click="confirmDeleteMenuItem(item.id)" class="text-red-500 hover:underline font-medium">Hapus</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div x-show="showCheckoutModal" @click.self="showCheckoutModal = false" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" x-cloak>
+        <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-extrabold text-slate-800 text-lg">Selesaikan Pembayaran</h3>
+                <button @click="showCheckoutModal = false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+            </div>
+
+            <div class="bg-batari-50 p-4 rounded-xl border border-batari-100 text-center">
+                <span class="text-xs text-slate-500 font-medium">Total Tagihan</span>
+                <div class="text-2xl font-black text-batari-700 mt-0.5" x-text="formatRupiah(cartGrandTotal())"></div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1.5">Metode Pembayaran</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button @click="paymentMethod = 'Cash'" :class="paymentMethod === 'Cash' ? 'bg-batari-600 text-white font-bold ring-2 ring-batari-600' : 'bg-slate-100 text-slate-700'" class="py-2 rounded-xl text-xs transition">Tunai (Cash)</button>
+                    <button @click="paymentMethod = 'QRIS'" :class="paymentMethod === 'QRIS' ? 'bg-batari-600 text-white font-bold ring-2 ring-batari-600' : 'bg-slate-100 text-slate-700'" class="py-2 rounded-xl text-xs transition">QRIS</button>
+                    <button @click="paymentMethod = 'Transfer'" :class="paymentMethod === 'Transfer' ? 'bg-batari-600 text-white font-bold ring-2 ring-batari-600' : 'bg-slate-100 text-slate-700'" class="py-2 rounded-xl text-xs transition">Transfer</button>
+                </div>
+            </div>
+
+            <div x-show="paymentMethod === 'Cash'" class="space-y-3 pt-1">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Jumlah Uang Diterima (Rp)</label>
+                    <input type="number" x-model.number="cashPaid" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-base font-bold text-slate-800 focus:ring-2 focus:ring-batari-500 focus:outline-none" placeholder="0">
+                </div>
+
+                <div class="grid grid-cols-4 gap-1.5">
+                    <button @click="cashPaid = cartGrandTotal()" class="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold">Pas</button>
+                    <button @click="cashPaid = 10000" class="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold">10k</button>
+                    <button @click="cashPaid = 20000" class="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold">20k</button>
+                    <button @click="cashPaid = 50000" class="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold">50k</button>
+                    <button @click="cashPaid = 100000" class="col-span-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold">100k</button>
+                    <button @click="cashPaid = Math.ceil(cartGrandTotal() / 50000) * 50000" class="col-span-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-bold">Bulat 50k</button>
+                </div>
+
+                <div class="flex justify-between items-center p-3 rounded-xl bg-slate-100 text-xs">
+                    <span class="font-bold text-slate-600">Uang Kembalian:</span>
+                    <span class="font-extrabold text-sm" :class="calculateChange() < 0 ? 'text-red-500' : 'text-emerald-600'" x-text="formatRupiah(calculateChange())"></span>
+                </div>
+            </div>
+
+            <button @click="processPayment()" :disabled="paymentMethod === 'Cash' && calculateChange() < 0" :class="(paymentMethod === 'Cash' && calculateChange() < 0) ? 'bg-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 shadow-lg active:scale-98'" class="w-full py-3 rounded-xl text-white font-extrabold text-sm transition mt-2">
+                Konfirmasi & Cetak Struk
+            </button>
+        </div>
+    </div>
+
+    <div x-show="showReceiptModal" @click.self="closeReceiptAndReset()" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" x-cloak>
+        <div class="bg-white rounded-2xl max-w-xs w-full p-4 shadow-2xl space-y-3 max-h-[95vh] flex flex-col">
+            
+            <div class="flex justify-between items-center border-b pb-2 flex-none">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm">Struk Pembayaran</h3>
+                    <span class="text-[10px] text-emerald-600 font-semibold">Format TM-58V (Lebar 58mm)</span>
+                </div>
+                <button @click="closeReceiptAndReset()" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto bg-slate-50 p-2 rounded-xl border border-slate-200 flex justify-center">
+                <div id="printable-receipt" class="text-center font-mono text-[10px] text-slate-900 leading-tight space-y-1 w-[48mm] max-w-[48mm] bg-white p-2 shadow-sm border border-slate-200">
+                    
+                    <div class="space-y-0.5 border-b border-dashed border-slate-400 pb-1.5">
+                        <div class="font-extrabold text-xs tracking-wider uppercase">BATARI COFFEE</div>
+                        <div class="text-[9px] font-bold">JL. MENTRAMAN, TALUN BLITAR</div>
+                        <div class="text-[9px]" x-text="'No: ' + (currentTrx ? currentTrx.invoiceNo : '')"></div>
+                        <div class="text-[9px]" x-text="currentTrx ? currentTrx.dateTime : ''"></div>
+                        <div class="text-[9px]" x-text="'Kasir: ' + (currentTrx ? (currentTrx.cashierName || 'KEBOO') : '')"></div>
+                        <div class="text-[9px]" x-text="'Pelg : ' + (currentTrx ? currentTrx.customerName : '') + ' (' + (currentTrx ? currentTrx.orderType : '') + ')'"></div>
+                    </div>
+
+                    <div class="border-b border-dashed border-slate-400 py-1 text-left space-y-1">
+                        <template x-if="currentTrx">
+                            <template x-for="item in currentTrx.items" :key="item.id">
+                                <div>
+                                    <div class="font-bold text-[10px] truncate" x-text="item.name"></div>
+                                    <div class="flex justify-between text-[9px] text-slate-800">
+                                        <span x-text="item.qty + ' x ' + formatRupiah(item.price)"></span>
+                                        <span class="font-bold text-slate-900" x-text="formatRupiah(item.qty * item.price)"></span>
+                                    </div>
+                                    <template x-if="item.note">
+                                        <div class="text-[8px] italic text-slate-600" x-text="'* ' + item.note"></div>
+                                    </template>
+                                </div>
+                            </template>
+                        </template>
+                    </div>
+
+                    <div class="space-y-0.5 text-right border-b border-dashed border-slate-400 py-1.5">
+                        <div class="flex justify-between text-[9px]">
+                            <span>Subtotal</span>
+                            <span x-text="formatRupiah(currentTrx ? currentTrx.subtotal : 0)"></span>
+                        </div>
+                        <template x-if="currentTrx && currentTrx.discount > 0">
+                            <div class="flex justify-between text-[9px] text-red-600">
+                                <span>Diskon</span>
+                                <span x-text="'-' + formatRupiah(currentTrx.discount)"></span>
+                            </div>
+                        </template>
+                        <div class="flex justify-between font-extrabold text-[10px] pt-0.5">
+                            <span>TOTAL</span>
+                            <span x-text="formatRupiah(currentTrx ? currentTrx.grandTotal : 0)"></span>
+                        </div>
+                        <div class="flex justify-between text-[9px]">
+                            <span x-text="'Bayar (' + (currentTrx ? currentTrx.paymentMethod : '') + ')'"></span>
+                            <span x-text="formatRupiah(currentTrx ? currentTrx.cashPaid : 0)"></span>
+                        </div>
+                        <div class="flex justify-between text-[9px]">
+                            <span>Kembali</span>
+                            <span x-text="formatRupiah(currentTrx ? currentTrx.change : 0)"></span>
+                        </div>
+                    </div>
+
+                    <div class="pt-1 text-center text-[9px] space-y-0.5">
+                        <div class="font-bold">Terima Kasih Atas Kunjungan Anda!</div>
+                        <div>Follow IG @batari.coffee</div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Receipt Actions -->
+            <div class="space-y-1.5 flex-none">
+                <!-- Tombol Transaksi Baru (Utama) -->
+                <button @click="closeReceiptAndReset()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center space-x-1 shadow-md">
+                    <span>✓ Selesai & Transaksi Baru</span>
+                </button>
+
+                <!-- Tombol Cetak Bluetooth TM-58V Direct -->
+                <button @click="printBluetooth()" :disabled="btConnecting" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10 10 0 0114.142 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path></svg>
+                    <span x-text="btConnecting ? 'Menghubungkan Bluetooth...' : 'Cetak Bluetooth TM-58V'"></span>
+                </button>
+
+                <!-- Tombol Cetak System -->
+                <button @click="printReceipt()" class="w-full py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                    <span>Cetak System / Thermal (58mm)</span>
+                </button>
+
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button @click="downloadReceiptPDF()" class="py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center">
+                        <span>PDF Struk</span>
+                    </button>
+                    <button @click="shareWhatsApp()" class="py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center">
+                        <span>Kirim WA</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div x-show="showMenuModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" x-cloak>
+        <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="font-bold text-slate-800 text-base" x-text="editingMenuId ? 'Edit Menu' : 'Tambah Menu Baru'"></h3>
+                <button @click="showMenuModal = false" class="text-slate-400 font-bold">✕</button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nama Menu</label>
+                    <input type="text" x-model="menuForm.name" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-1 focus:ring-batari-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Kategori</label>
+                    <select x-model="menuForm.category" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-1 focus:ring-batari-500">
+                        <template x-for="cat in categories.filter(c => c !== 'Semua')" :key="cat">
+                            <option :value="cat" x-text="cat"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Harga (Rp)</label>
+                    <input type="number" x-model.number="menuForm.price" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-1 focus:ring-batari-500">
+                </div>
+            </div>
+
+            <button @click="saveMenuItem()" class="w-full py-2.5 bg-batari-600 hover:bg-batari-700 text-white rounded-xl text-xs font-bold transition">
+                Simpan Menu
+            </button>
+        </div>
+    </div>
+
+    <div x-show="confirmDialog.show" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" x-cloak>
+        <div class="bg-white rounded-2xl max-w-xs w-full p-5 shadow-2xl space-y-4 text-center">
+            <div class="w-12 h-12 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                ⚠️
+            </div>
+            <div>
+                <h4 class="font-extrabold text-slate-800 text-sm" x-text="confirmDialog.title"></h4>
+                <p class="text-xs text-slate-500 mt-1" x-text="confirmDialog.message"></p>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-2">
+                <button @click="confirmDialog.show = false" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">Batal</button>
+                <button @click="executeConfirmAction()" class="py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION BANNER -->
+    <div x-show="toast.show" x-transition class="fixed bottom-5 right-5 z-50 bg-slate-800 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 max-w-sm" x-cloak>
+        <span x-text="toast.icon" class="text-lg"></span>
+        <span x-text="toast.message" class="text-xs font-medium"></span>
+    </div>
+
+    <script>
+        function batariApp() {
+            return {
+                activeTab: 'pos',
+                searchQuery: '',
+                selectedCategory: 'Semua',
+                showMobileCart: false,
+                showCheckoutModal: false,
+                showReceiptModal: false,
+                showMenuModal: false,
+                btConnecting: false,
+
+                // Audio Context for feedback sound synthesis
+                audioCtx: null,
+
+                // Invoice counter state for repeated continuous usage
+                invoiceCounter: 1,
+
+                // Toast & Custom Confirm
+                toast: { show: false, message: '', icon: 'ℹ️' },
+                confirmDialog: { show: false, title: '', message: '', action: null },
+
+                // Security & History Authentication state
+                isHistoryUnlocked: false,
+                authUsername: '',
+                authPassword: '',
+                showUsernameText: false,
+                showPasswordText: false,
+                authError: '',
+
+                // PWA Installation state
+                deferredPrompt: null,
+                canInstall: false,
+
+                // Cashier & Customer info
+                cashiers: ['KEBOO', 'AGUS', 'DEPHI'],
+                cashierName: 'KEBOO',
+                customerName: 'Pelanggan',
+                orderType: 'Dine-In',
+
+                // Cart state
+                cart: [],
+                discount: 0,
+                paymentMethod: 'Cash',
+                cashPaid: 0,
+
+                // Current receipt transaction model
+                currentTrx: null,
+
+                // Menu form modal state
+                editingMenuId: null,
+                menuForm: {
+                    name: '',
+                    category: 'Latte Series',
+                    price: 10000
+                },
+
+                categories: [
+                    'Semua',
+                    'Latte Series',
+                    'Americano Series',
+                    'Kopi Seduh',
+                    'Non-Coffee & Susu',
+                    'Teh & Segaran',
+                    'Makanan & Camilan'
+                ],
+
+                menuItems: [],
+                transactions: [],
+
+                get filteredMenuItems() {
+                    return this.menuItems.filter(item => {
+                        const matchesCategory = this.selectedCategory === 'Semua' || item.category === this.selectedCategory;
+                        const matchesSearch = item.name.toLowerCase().includes(this.searchQuery.toLowerCase());
+                        return matchesCategory && matchesSearch;
+                    });
+                },
+
+                init() {
+                    this.registerPWA();
+
+                    window.addEventListener('beforeinstallprompt', (e) => {
+                        e.preventDefault();
+                        this.deferredPrompt = e;
+                        this.canInstall = true;
+                    });
+
+                    // Keyboard shortcuts for closing modals
+                    window.addEventListener('keydown', (e) => {
+                        if (e.key === 'Escape') {
+                            this.closeAllModals();
+                        }
+                    });
+
+                    this.loadMenuItems();
+                    this.loadTransactions();
+                    this.loadInvoiceCounter();
+                },
+
+                // Pure Web Audio API tone synthesis for UI feedback
+                playBeep(type = 'add') {
+                    try {
+                        if (!this.audioCtx) {
+                            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        }
+                        if (this.audioCtx.state === 'suspended') {
+                            this.audioCtx.resume();
+                        }
+                        const osc = this.audioCtx.createOscillator();
+                        const gain = this.audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(this.audioCtx.destination);
+
+                        if (type === 'add') {
+                            osc.frequency.setValueAtTime(800, this.audioCtx.currentTime);
+                            gain.gain.setValueAtTime(0.08, this.audioCtx.currentTime);
+                            osc.start();
+                            osc.stop(this.audioCtx.currentTime + 0.08);
+                        } else if (type === 'success') {
+                            osc.frequency.setValueAtTime(523.25, this.audioCtx.currentTime); // C5
+                            osc.frequency.setValueAtTime(659.25, this.audioCtx.currentTime + 0.1); // E5
+                            osc.frequency.setValueAtTime(783.99, this.audioCtx.currentTime + 0.2); // G5
+                            gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
+                            osc.start();
+                            osc.stop(this.audioCtx.currentTime + 0.35);
+                        }
+                    } catch (e) {
+                        // Audio disabled or unsupported
+                    }
+                },
+
+                registerPWA() {
+                    if ('serviceWorker' in navigator) {
+                        // Service worker hook for offline cache PWA capability
+                    }
+                },
+
+                async installPwa() {
+                    if (this.deferredPrompt) {
+                        this.deferredPrompt.prompt();
+                        const { outcome } = await this.deferredPrompt.userChoice;
+                        if (outcome === 'accepted') {
+                            this.canInstall = false;
+                        }
+                        this.deferredPrompt = null;
+                    }
+                },
+
+                toggleFullscreen() {
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen().catch(() => {
+                            this.showToast('Mode Layar Penuh tidak didukung browser ini', '⚠️');
+                        });
+                    } else {
+                        if (document.exitFullscreen) {
+                            document.exitFullscreen();
+                        }
+                    }
+                },
+
+                switchTab(tabName) {
+                    this.closeAllModals();
+                    this.showMobileCart = false;
+                    this.activeTab = tabName;
+                },
+
+                closeAllModals() {
+                    this.showCheckoutModal = false;
+                    this.showReceiptModal = false;
+                    this.showMenuModal = false;
+                    this.confirmDialog.show = false;
+                },
+
+                loadInvoiceCounter() {
+                    try {
+                        const savedCounter = localStorage.getItem('batari_invoice_counter');
+                        if (savedCounter) {
+                            this.invoiceCounter = parseInt(savedCounter, 10) || 1;
+                        } else if (this.transactions.length > 0) {
+                            this.invoiceCounter = this.transactions.length + 1;
+                        } else {
+                            this.invoiceCounter = 1;
+                        }
+                    } catch (e) {
+                        this.invoiceCounter = 1;
+                    }
+                },
+
+                getNextInvoiceNumber() {
+                    const numStr = String(this.invoiceCounter).padStart(4, '0');
+                    return 'BTR-' + numStr;
+                },
+
+                showToast(message, icon = 'ℹ️') {
+                    this.toast.message = message;
+                    this.toast.icon = icon;
+                    this.toast.show = true;
+                    setTimeout(() => {
+                        this.toast.show = false;
+                    }, 3000);
+                },
+
+                askConfirmation(title, message, callback) {
+                    this.confirmDialog.title = title;
+                    this.confirmDialog.message = message;
+                    this.confirmDialog.action = callback;
+                    this.confirmDialog.show = true;
+                },
+
+                executeConfirmAction() {
+                    if (typeof this.confirmDialog.action === 'function') {
+                        this.confirmDialog.action();
+                    }
+                    this.confirmDialog.show = false;
+                },
+
+                loadMenuItems() {
+                    try {
+                        const savedMenu = localStorage.getItem('batari_menu_items');
+                        if (savedMenu) {
+                            this.menuItems = JSON.parse(savedMenu);
+                        } else {
+                            this.loadDefaultMenuItems();
+                        }
+                    } catch (e) {
+                        this.loadDefaultMenuItems();
+                    }
+                },
+
+                loadDefaultMenuItems() {
+                    this.menuItems = [
+                        { id: '1', name: 'Kopi Susu Batari', category: 'Latte Series', price: 18000 },
+                        { id: '2', name: 'Vanilla Latte', category: 'Latte Series', price: 20000 },
+                        { id: '3', name: 'Hazelnut Latte', category: 'Latte Series', price: 20000 },
+                        { id: '4', name: 'Caramel Macchiato', category: 'Latte Series', price: 22000 },
+                        { id: '5', name: 'Americano Ice/Hot', category: 'Americano Series', price: 15000 },
+                        { id: '6', name: 'Long Black', category: 'Americano Series', price: 15000 },
+                        { id: '7', name: 'V60 Manual Brew', category: 'Kopi Seduh', price: 22000 },
+                        { id: '8', name: 'Japanese Cold Drip', category: 'Kopi Seduh', price: 22000 },
+                        { id: '9', name: 'Matcha Latte', category: 'Non-Coffee & Susu', price: 20000 },
+                        { id: '10', name: 'Chocolate Cream', category: 'Non-Coffee & Susu', price: 20000 },
+                        { id: '11', name: 'Es Teh Manis', category: 'Teh & Segaran', price: 6000 },
+                        { id: '12', name: 'Lemon Tea', category: 'Teh & Segaran', price: 12000 },
+                        { id: '13', name: 'Lychee Tea', category: 'Teh & Segaran', price: 15000 },
+                        { id: '14', name: 'Kentang Goreng', category: 'Makanan & Camilan', price: 15000 },
+                        { id: '15', name: 'Roti Bakar Coklat', category: 'Makanan & Camilan', price: 15000 },
+                        { id: '16', name: 'Cireng Bumbu Rujak', category: 'Makanan & Camilan', price: 12000 }
+                    ];
+                    this.saveMenuItemsToStorage();
+                },
+
+                saveMenuItemsToStorage() {
+                    localStorage.setItem('batari_menu_items', JSON.stringify(this.menuItems));
+                },
+
+                loadTransactions() {
+                    try {
+                        const saved = localStorage.getItem('batari_transactions');
+                        this.transactions = saved ? JSON.parse(saved) : [];
+                    } catch (e) {
+                        this.transactions = [];
+                    }
+                },
+
+                saveTransactionsToStorage() {
+                    localStorage.setItem('batari_transactions', JSON.stringify(this.transactions));
+                },
+
+                addToCart(item) {
+                    const existingIndex = this.cart.findIndex(c => c.id === item.id);
+                    if (existingIndex > -1) {
+                        this.cart[existingIndex].qty++;
+                    } else {
+                        this.cart.push({
+                            id: item.id,
+                            name: item.name,
+                            price: item.price,
+                            qty: 1,
+                            note: ''
+                        });
+                    }
+                    this.playBeep('add');
+                    this.showToast(`${item.name} +1`, '🛒');
+                },
+
+                updateQty(index, delta) {
+                    if (index >= 0 && index < this.cart.length) {
+                        this.cart[index].qty += delta;
+                        if (this.cart[index].qty <= 0) {
+                            this.cart.splice(index, 1);
+                        }
+                    }
+                },
+
+                confirmClearCart() {
+                    this.askConfirmation('Reset Keranjang', 'Apakah Anda yakin ingin mengosongkan keranjang pesanan?', () => {
+                        this.clearCart();
+                        this.showToast('Keranjang direset', '🧹');
+                    });
+                },
+
+                clearCart() {
+                    this.cart = [];
+                    this.discount = 0;
+                    this.customerName = 'Pelanggan';
+                    this.orderType = 'Dine-In';
+                    this.cashPaid = 0;
+                    this.searchQuery = '';
+                },
+
+                cartTotalCount() {
+                    return this.cart.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+                },
+
+                cartTotalPrice() {
+                    return this.cart.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
+                },
+
+                cartGrandTotal() {
+                    const total = this.cartTotalPrice() - (Number(this.discount) || 0);
+                    return total < 0 ? 0 : Math.round(total);
+                },
+
+                openCheckoutModal() {
+                    if (this.cart.length === 0) return;
+                    this.cashPaid = this.cartGrandTotal();
+                    this.showCheckoutModal = true;
+                },
+
+                calculateChange() {
+                    if (this.paymentMethod !== 'Cash') return 0;
+                    const paid = Number(this.cashPaid) || 0;
+                    return Math.round(paid - this.cartGrandTotal());
+                },
+
+                unlockHistory() {
+                    if (this.authUsername.toLowerCase() === 'admin' && this.authPassword === 'batari123') {
+                        this.isHistoryUnlocked = true;
+                        this.authError = '';
+                        this.authUsername = '';
+                        this.authPassword = '';
+                        this.showToast('Akses Riwayat Terbuka', '🔓');
+                    } else {
+                        this.authError = 'Username atau Password salah!';
+                    }
+                },
+
+                lockHistory() {
+                    this.isHistoryUnlocked = false;
+                    this.showToast('Riwayat terkunci kembali', '🔒');
+                },
+
+                calculateTotalRevenue() {
+                    return this.transactions.reduce((sum, trx) => sum + (Number(trx.grandTotal) || 0), 0);
+                },
+
+                calculatePaymentBreakdown() {
+                    return this.transactions.reduce((acc, trx) => {
+                        if (trx.paymentMethod === 'Cash') {
+                            acc.cash += Number(trx.grandTotal) || 0;
+                        } else {
+                            acc.digital += Number(trx.grandTotal) || 0;
+                        }
+                        return acc;
+                    }, { cash: 0, digital: 0 });
+                },
+
+                processPayment() {
+                    if (this.cart.length === 0) return;
+
+                    const now = new Date();
+                    const dateStr = now.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                    
+                    const invoiceNo = this.getNextInvoiceNumber();
+
+                    const newTrx = {
+                        id: 'TRX-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                        invoiceNo: invoiceNo,
+                        dateTime: dateStr,
+                        cashierName: this.cashierName || 'KEBOO',
+                        customerName: this.customerName || 'Pelanggan',
+                        orderType: this.orderType,
+                        items: JSON.parse(JSON.stringify(this.cart)),
+                        subtotal: this.cartTotalPrice(),
+                        discount: Number(this.discount) || 0,
+                        grandTotal: this.cartGrandTotal(),
+                        paymentMethod: this.paymentMethod,
+                        cashPaid: this.paymentMethod === 'Cash' ? (Number(this.cashPaid) || this.cartGrandTotal()) : this.cartGrandTotal(),
+                        change: this.calculateChange()
+                    };
+
+                    this.transactions.unshift(newTrx);
+                    this.saveTransactionsToStorage();
+
+                    // Increment invoice counter for next transactions
+                    this.invoiceCounter++;
+                    localStorage.setItem('batari_invoice_counter', this.invoiceCounter.toString());
+
+                    this.currentTrx = newTrx;
+                    this.showCheckoutModal = false;
+                    this.showReceiptModal = true;
+                    this.playBeep('success');
+                    this.showToast('Transaksi Sukses Disimpan', '✅');
+                },
+
+                closeReceiptAndReset() {
+                    this.showReceiptModal = false;
+                    this.showMobileCart = false;
+                    this.clearCart();
+                    this.activeTab = 'pos';
+                    this.showToast('Siap untuk transaksi berikutnya!', '✨');
+                },
+
+                reprintReceipt(trx) {
+                    this.currentTrx = trx;
+                    this.showReceiptModal = true;
+                },
+
+                confirmDeleteTransaction(id) {
+                    this.askConfirmation('Hapus Transaksi', 'Apakah Anda yakin ingin menghapus data transaksi ini?', () => {
+                        this.deleteTransaction(id);
+                    });
+                },
+
+                deleteTransaction(id) {
+                    this.transactions = this.transactions.filter(trx => trx.id !== id);
+                    this.saveTransactionsToStorage();
+                    this.showToast('Transaksi berhasil dihapus', '🗑️');
+                },
+
+                confirmResetDefaultMenu() {
+                    this.askConfirmation('Reset Menu', 'Apakah Anda yakin ingin mengembalikan daftar menu ke setelan awal?', () => {
+                        this.loadDefaultMenuItems();
+                        this.showToast('Menu berhasil di-reset', '🔄');
+                    });
+                },
+
+                openAddMenuModal() {
+                    this.editingMenuId = null;
+                    this.menuForm = { name: '', category: 'Latte Series', price: 10000 };
+                    this.showMenuModal = true;
+                },
+
+                editMenuItem(item) {
+                    this.editingMenuId = item.id;
+                    this.menuForm = { name: item.name, category: item.category, price: item.price };
+                    this.showMenuModal = true;
+                },
+
+                saveMenuItem() {
+                    if (!this.menuForm.name.trim() || this.menuForm.price <= 0) {
+                        this.showToast('Isi nama dan harga menu dengan benar', '⚠️');
+                        return;
+                    }
+
+                    if (this.editingMenuId) {
+                        const idx = this.menuItems.findIndex(i => i.id === this.editingMenuId);
+                        if (idx > -1) {
+                            this.menuItems[idx] = {
+                                id: this.editingMenuId,
+                                name: this.menuForm.name.trim(),
+                                category: this.menuForm.category,
+                                price: Number(this.menuForm.price)
+                            };
+                        }
+                    } else {
+                        this.menuItems.push({
+                            id: 'MENU-' + Date.now(),
+                            name: this.menuForm.name.trim(),
+                            category: this.menuForm.category,
+                            price: Number(this.menuForm.price)
+                        });
+                    }
+
+                    this.saveMenuItemsToStorage();
+                    this.showMenuModal = false;
+                    this.showToast('Menu berhasil disimpan', '✅');
+                },
+
+                confirmDeleteMenuItem(id) {
+                    this.askConfirmation('Hapus Menu', 'Apakah Anda yakin ingin menghapus menu ini?', () => {
+                        this.deleteMenuItem(id);
+                    });
+                },
+
+                deleteMenuItem(id) {
+                    this.menuItems = this.menuItems.filter(item => item.id !== id);
+                    this.saveMenuItemsToStorage();
+                    this.showToast('Menu berhasil dihapus', '🗑️');
+                },
+
+                exportToPDF() {
+                    if (this.transactions.length === 0) {
+                        this.showToast('Tidak ada transaksi untuk diexport', '⚠️');
+                        return;
+                    }
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    doc.setFontSize(16);
+                    doc.text('Laporan Penjualan Batari Coffee & Space', 14, 15);
+                    doc.setFontSize(10);
+                    doc.text(`Total Omset: ${this.formatRupiah(this.calculateTotalRevenue())} (${this.transactions.length} Nota)`, 14, 22);
+
+                    const tableData = this.transactions.map(t => [
+                        t.invoiceNo,
+                        t.dateTime,
+                        t.cashierName,
+                        t.customerName,
+                        t.paymentMethod,
+                        this.formatRupiah(t.grandTotal)
+                    ]);
+
+                    doc.autoTable({
+                        startY: 28,
+                        head: [['No. Nota', 'Waktu', 'Kasir', 'Pelanggan', 'Metode', 'Total']],
+                        body: tableData,
+                    });
+
+                    doc.save(`Laporan_Penjualan_Batari_${new Date().toISOString().slice(0,10)}.pdf`);
+                    this.showToast('PDF berhasil diunduh', '📄');
+                },
+
+                exportToCSV() {
+                    if (this.transactions.length === 0) {
+                        this.showToast('Tidak ada transaksi untuk diexport', '⚠️');
+                        return;
+                    }
+                    let csv = 'No Nota,Waktu,Kasir,Pelanggan,Tipe,Metode,Subtotal,Diskon,Total\n';
+                    this.transactions.forEach(t => {
+                        csv += `"${t.invoiceNo}","${t.dateTime}","${t.cashierName}","${t.customerName}","${t.orderType}","${t.paymentMethod}",${t.subtotal},${t.discount},${t.grandTotal}\n`;
+                    });
+                    
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `Laporan_Batari_${new Date().toISOString().slice(0,10)}.csv`;
+                    link.click();
+                    this.showToast('CSV berhasil diunduh', '📊');
+                },
+
+                printReceipt() {
+                    window.print();
+                },
+
+                downloadReceiptPDF() {
+                    if (!this.currentTrx) return;
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF({
+                        unit: 'mm',
+                        format: [58, 150]
+                    });
+
+                    doc.setFontSize(10);
+                    doc.text('BATARI COFFEE', 29, 8, { align: 'center' });
+                    doc.setFontSize(7);
+                    doc.text('JL. MENTRAMAN, TALUN BLITAR', 29, 12, { align: 'center' });
+                    doc.text(`No: ${this.currentTrx.invoiceNo}`, 29, 16, { align: 'center' });
+                    doc.text(this.currentTrx.dateTime, 29, 20, { align: 'center' });
+                    doc.text(`Kasir: ${this.currentTrx.cashierName}`, 29, 24, { align: 'center' });
+                    doc.text(`Pelg: ${this.currentTrx.customerName} (${this.currentTrx.orderType})`, 29, 28, { align: 'center' });
+
+                    let y = 34;
+                    doc.text('------------------------------------------', 29, y, { align: 'center' });
+                    y += 4;
+
+                    this.currentTrx.items.forEach(item => {
+                        doc.text(item.name, 4, y);
+                        y += 4;
+                        doc.text(`${item.qty} x ${item.price}`, 4, y);
+                        doc.text(this.formatRupiah(item.qty * item.price), 54, y, { align: 'right' });
+                        y += 4;
+                    });
+
+                    doc.text('------------------------------------------', 29, y, { align: 'center' });
+                    y += 4;
+                    doc.text(`TOTAL: ${this.formatRupiah(this.currentTrx.grandTotal)}`, 54, y, { align: 'right' });
+                    y += 4;
+                    doc.text(`Bayar: ${this.formatRupiah(this.currentTrx.cashPaid)}`, 54, y, { align: 'right' });
+                    y += 4;
+                    doc.text(`Kembali: ${this.formatRupiah(this.currentTrx.change)}`, 54, y, { align: 'right' });
+                    y += 8;
+
+                    doc.text('Terima Kasih Atas Kunjungan Anda!', 29, y, { align: 'center' });
+
+                    doc.save(`Struk_${this.currentTrx.invoiceNo}.pdf`);
+                    this.showToast('Struk PDF berhasil diunduh', '📄');
+                },
+
+                shareWhatsApp() {
+                    if (!this.currentTrx) return;
+                    let text = `*BATARI COFFEE & SPACE*\n`;
+                    text += `Nota: ${this.currentTrx.invoiceNo}\n`;
+                    text += `Tanggal: ${this.currentTrx.dateTime}\n`;
+                    text += `Pelanggan: ${this.currentTrx.customerName}\n`;
+                    text += `--------------------------------\n`;
+                    this.currentTrx.items.forEach(i => {
+                        text += `${i.name} x${i.qty} = ${this.formatRupiah(i.qty * i.price)}\n`;
+                    });
+                    text += `--------------------------------\n`;
+                    text += `*TOTAL: ${this.formatRupiah(this.currentTrx.grandTotal)}*\n`;
+                    text += `Metode: ${this.currentTrx.paymentMethod}\n\n`;
+                    text += `Terima Kasih! 🙏`;
+
+                    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+                    window.open(url, '_blank');
+                },
+
+                async printBluetooth() {
+                    if (!this.currentTrx) return;
+                    const data = this.buildEscPosReceipt(this.currentTrx);
+
+                    if (navigator.bluetooth) {
+                        try {
+                            this.btConnecting = true;
+                            const device = await navigator.bluetooth.requestDevice({
+                                acceptAllDevices: true,
+                                optionalServices: [
+                                    '000018f0-0000-1000-8000-00805f9b34fb',
+                                    '00001101-0000-1000-8000-00805f9b34fb',
+                                    '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+                                    'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
+                                ]
+                            });
+
+                            const server = await device.gatt.connect();
+                            let targetChar = null;
+
+                            const services = await server.getPrimaryServices();
+                            for (const service of services) {
+                                const characteristics = await service.getCharacteristics();
+                                for (const char of characteristics) {
+                                    if (char.properties.write || char.properties.writeWithoutResponse) {
+                                        targetChar = char;
+                                        break;
+                                    }
+                                }
+                                if (targetChar) break;
+                            }
+
+                            if (targetChar) {
+                                const CHUNK_SIZE = 100;
+                                for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+                                    const chunk = data.slice(i, i + CHUNK_SIZE);
+                                    await targetChar.writeValue(chunk);
+                                }
+                                this.btConnecting = false;
+                                this.showToast('Printer Bluetooth terhubung & mencetak', '🖨️');
+                                return;
+                            }
+                        } catch (err) {
+                            console.log('Bluetooth direct print fallback:', err);
+                        } finally {
+                            this.btConnecting = false;
+                        }
+                    }
+
+                    this.printViaRawBT(data);
+                },
+
+                buildEscPosReceipt(trx) {
+                    const encoder = new TextEncoder();
+                    let text = `\x1b\x40`;
+                    text += `\x1b\x61\x01`;
+                    text += `BATARI COFFEE\n`;
+                    text += `JL. MENTRAMAN, TALUN BLITAR\n`;
+                    text += `No: ${trx.invoiceNo}\n`;
+                    text += `${trx.dateTime}\n`;
+                    text += `Kasir: ${trx.cashierName}\n`;
+                    text += `Pelg: ${trx.customerName} (${trx.orderType})\n`;
+                    text += `--------------------------------\n`;
+                    text += `\x1b\x61\x00`;
+
+                    trx.items.forEach(i => {
+                        text += `${i.name}\n`;
+                        text += `${i.qty} x ${i.price} = ${i.qty * i.price}\n`;
+                    });
+
+                    text += `--------------------------------\n`;
+                    text += `\x1b\x61\x02`;
+                    text += `TOTAL: ${trx.grandTotal}\n`;
+                    text += `Bayar: ${trx.cashPaid}\n`;
+                    text += `Kembali: ${trx.change}\n`;
+                    text += `--------------------------------\n`;
+                    text += `\x1b\x61\x01`;
+                    text += `Terima Kasih!\n\n\n\n`;
+
+                    return encoder.encode(text);
+                },
+
+                printViaRawBT(data) {
+                    this.showToast('Gunakan opsi Cetak System / Browser jika Bluetooth langsung tidak didukung browser', 'ℹ️');
+                },
+
+                formatRupiah(number) {
+                    return new Intl.NumberFormat('id-ID', {
+                        style: 'currency',
+                        currency: 'IDR',
+                        maximumFractionDigits: 0
+                    }).format(number || 0);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
